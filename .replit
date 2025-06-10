@@ -2,3 +2,19 @@ modules = ["web", "python-3.12", "bash"]
 
 [nix]
 channel = "stable-24_05"
+
+[workflows]
+runButton = "Run Flask Server"
+
+[[workflows.workflow]]
+name = "Run Flask Server"
+author = 43701745
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python gps_server.py"
+
+[[ports]]
+localPort = 5173
+externalPort = 80
