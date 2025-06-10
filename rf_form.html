@@ -79,24 +79,82 @@
         document.getElementById("lon").value = "Se încarcă..."
         document.getElementById("azim").value = ""
 
+        // Try to get device orientation for azimuth
+        let azimuthDetected = false
+        
+        // Method 1: Try DeviceOrientationEvent for compass heading
+        if (window.DeviceOrientationEvent) {
+          const handleOrientation = (event) => {
+            if (event.alpha !== null && !azimuthDetected) {
+              // Convert alpha to compass heading (0-360°)
+              let heading = 360 - event.alpha
+              if (heading >= 360) heading -= 360
+              if (heading < 0) heading += 360
+              
+              document.getElementById("azim").value = heading.toFixed(1)
+              azimuthDetected = true
+              window.removeEventListener('deviceorientation', handleOrientation)
+            }
+          }
+          
+          // Listen for orientation for a short time
+          window.addEventListener('deviceorientation', handleOrientation)
+          setTimeout(() => {
+            window.removeEventListener('deviceorientation', handleOrientation)
+          }, 2000)
+        }
+
         navigator.geolocation.getCurrentPosition(
           function (pos) {
             document.getElementById("lat").value =
               pos.coords.latitude.toFixed(6)
             document.getElementById("lon").value =
               pos.coords.longitude.toFixed(6)
+            
+            // Method 2: Use GPS heading if available
             if (
               pos.coords.heading !== null &&
-              pos.coords.heading !== undefined
+              pos.coords.heading !== undefined &&
+              !isNaN(pos.coords.heading)
             ) {
               document.getElementById("azim").value =
                 pos.coords.heading.toFixed(1)
+              azimuthDetected = true
+            }
+
+            // Method 3: Try watchPosition for heading (requires movement)
+            if (!azimuthDetected) {
+              const watchId = navigator.geolocation.watchPosition(
+                function(position) {
+                  if (position.coords.heading !== null && 
+                      position.coords.heading !== undefined && 
+                      !isNaN(position.coords.heading)) {
+                    document.getElementById("azim").value = 
+                      position.coords.heading.toFixed(1)
+                    navigator.geolocation.clearWatch(watchId)
+                  }
+                },
+                function(error) {
+                  console.log("Watch position error:", error)
+                },
+                { enableHighAccuracy: true, timeout: 5000 }
+              )
+              
+              // Clear watch after 5 seconds
+              setTimeout(() => {
+                navigator.geolocation.clearWatch(watchId)
+              }, 5000)
             }
 
             // Re-enable button and show success
             refreshBtn.disabled = false
             refreshBtn.textContent = originalText
-            alert("✅ Locația a fost actualizată cu succes!")
+            
+            const azimValue = document.getElementById("azim").value
+            const statusMsg = azimValue ? 
+              "✅ Locația și azimutul au fost actualizate!" : 
+              "✅ Locația actualizată! Azimutul nu este disponibil pe acest dispozitiv."
+            alert(statusMsg)
           },
           function (err) {
             // Re-enable button on error
@@ -148,6 +206,28 @@
         )
       }
 
+      function solicitaPermisiuniAzimut() {
+        // For iOS 13+ devices, request permission for device orientation
+        if (typeof DeviceOrientationEvent !== 'undefined' && 
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+          DeviceOrientationEvent.requestPermission()
+            .then(response => {
+              if (response === 'granted') {
+                alert("✅ Permisiuni acordate! Încearcă din nou să preiei locația.")
+                preiaLocatia()
+              } else {
+                alert("❌ Permisiuni refuzate pentru orientarea dispozitivului.")
+              }
+            })
+            .catch(error => {
+              alert("⚠️ Eroare la solicitarea permisiunilor: " + error)
+            })
+        } else {
+          alert("ℹ️ Acest dispozitiv nu necesită permisiuni speciale pentru orientare.")
+          preiaLocatia()
+        }
+      }
+
       function trimiteDate() {
         const lat = document.getElementById("lat").value
         const lon = document.getElementById("lon").value
@@ -179,6 +259,12 @@
         style="background-color: #28a745; margin-bottom: 10px"
       >
         🔄 Reîmprospătează Locația
+      </button>
+      <button
+        onclick="solicitaPermisiuniAzimut()"
+        style="background-color: #ffc107; color: black; margin-bottom: 10px"
+      >
+        🧭 Activează Azimutul
       </button>
       <button onclick="trimiteDate()">📤 Trimite către Server</button>
     </div>
