@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Trimitere coordonate RF</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      body {
+        font-family: sans-serif;
+        background: #f2f2f2;
+        padding: 20px;
+        color: #333;
+      }
+      input,
+      button {
+        width: 100%;
+        padding: 12px;
+        margin-top: 10px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 16px;
+        box-sizing: border-box;
+      }
+      button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      button:disabled {
+        background-color: #6c757d;
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+      input[readonly] {
+        background-color: #f8f9fa;
+      }
+      .container {
+        max-width: 400px;
+        margin: auto;
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+      }
+    </style>
+    <script>
+      function preiaLocatia() {
+        if (!navigator.geolocation) {
+          alert("GPS nu e suportat de acest browser.")
+          return
+        }
+
+        // Check if we're on HTTPS or localhost (required for geolocation on mobile)
+        const isSecureContext =
+          window.isSecureContext ||
+          location.protocol === "https:" ||
+          location.hostname === "localhost"
+        if (!isSecureContext) {
+          alert(
+            "⚠️ ATENȚIE: Geolocation necesită HTTPS pe dispozitivele mobile. Încercați să accesați prin HTTPS sau să utilizați un browser care permite HTTP pentru geolocation."
+          )
+        }
+
+        // Disable the refresh button and show loading state
+        const refreshBtn = document.querySelector(
+          'button[onclick="preiaLocatia()"]'
+        )
+        const originalText = refreshBtn.textContent
+        refreshBtn.disabled = true
+        refreshBtn.textContent = "🔄 Se obține locația..."
+
+        // Clear current values to show we're getting new ones
+        document.getElementById("lat").value = "Se încarcă..."
+        document.getElementById("lon").value = "Se încarcă..."
+        document.getElementById("azim").value = ""
+
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            document.getElementById("lat").value =
+              pos.coords.latitude.toFixed(6)
+            document.getElementById("lon").value =
+              pos.coords.longitude.toFixed(6)
+            if (
+              pos.coords.heading !== null &&
+              pos.coords.heading !== undefined
+            ) {
+              document.getElementById("azim").value =
+                pos.coords.heading.toFixed(1)
+            }
+
+            // Re-enable button and show success
+            refreshBtn.disabled = false
+            refreshBtn.textContent = originalText
+            alert("✅ Locația a fost actualizată cu succes!")
+          },
+          function (err) {
+            // Re-enable button on error
+            refreshBtn.disabled = false
+            refreshBtn.textContent = originalText
+
+            // Clear loading text
+            document.getElementById("lat").value = ""
+            document.getElementById("lon").value = ""
+
+            let errorMsg = "❌ Eroare GPS: "
+            let suggestions = ""
+
+            switch (err.code) {
+              case 1:
+                errorMsg += "Accesul la locație a fost refuzat."
+                suggestions =
+                  "\n\n💡 Soluții:\n• Verificați setările browser-ului pentru locație\n• Încercați să reîmprospătați pagina\n• Pe mobile: verificați setările de locație din Settings"
+                break
+              case 2:
+                errorMsg += "Poziția nu este disponibilă."
+                suggestions =
+                  "\n\n💡 Soluții:\n• Verificați că GPS-ul este activat\n• Încercați să ieșiți în exterior\n• Verificați conexiunea la internet"
+                break
+              case 3:
+                errorMsg += "Timeout - timpul de așteptare a expirat."
+                suggestions =
+                  "\n\n💡 Soluții:\n• Încercați din nou\n• Verificați semnalul GPS\n• Ieșiți în exterior pentru semnal mai bun"
+                break
+              default:
+                errorMsg += err.message
+                break
+            }
+
+            // Add context info for debugging
+            const contextInfo = `\n\n🔧 Info tehnic:\n• Browser: ${
+              navigator.userAgent.includes("Mobile") ? "Mobile" : "Desktop"
+            }\n• HTTPS: ${
+              location.protocol === "https:" ? "Da" : "Nu"
+            }\n• URL: ${location.href}`
+
+            alert(errorMsg + suggestions + contextInfo)
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0, // Don't use cached location, get fresh one
+          }
+        )
+      }
+
+      function trimiteDate() {
+        const lat = document.getElementById("lat").value
+        const lon = document.getElementById("lon").value
+        const azim = document.getElementById("azim").value
+
+        const serverUrl = window.location.origin
+        fetch(`${serverUrl}/adauga`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat, lon, azim }),
+        })
+          .then((r) => r.json())
+          .then((data) => alert(data.mesaj))
+          .catch((err) => alert("Eroare: " + err))
+      }
+    </script>
+  </head>
+  <body onload="preiaLocatia()">
+    <div class="container">
+      <h2>📡 Trimite Coordonate RF</h2>
+      <label>Latitudine:</label>
+      <input id="lat" readonly />
+      <label>Longitudine:</label>
+      <input id="lon" readonly />
+      <label>Azimut (°):</label>
+      <input id="azim" placeholder="Opțional dacă nu e detectat" />
+      <button
+        onclick="preiaLocatia()"
+        style="background-color: #28a745; margin-bottom: 10px"
+      >
+        🔄 Reîmprospătează Locația
+      </button>
+      <button onclick="trimiteDate()">📤 Trimite către Server</button>
+    </div>
+  </body>
+</html>
