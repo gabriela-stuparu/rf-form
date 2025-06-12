@@ -101,21 +101,65 @@ def sterge_coordonate():
     """Delete all coordinates"""
     try:
         if os.path.exists(CSV_FILE):
-            os.remove(CSV_FILE)
+            # Clean the file but keep the header
+            with open(CSV_FILE, "w", newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp", "lat", "lon", "azimut"])
         return jsonify({"mesaj": "Toate coordonatele au fost șterse"}), 200
     except Exception as e:
         print(f"[❌] Eroare la ștergerea coordonatelor: {str(e)}")
         return jsonify({"mesaj": "Eroare la ștergerea coordonatelor"}), 500
 
+@app.route('/sterge/<int:index>', methods=['DELETE'])
+def sterge_coordonata_index(index):
+    """Delete a specific coordinate by index"""
+    try:
+        if not os.path.exists(CSV_FILE):
+            return jsonify({"mesaj": "Nu există coordonate de șters"}), 404
+        
+        # Read all coordinates
+        coordonate = []
+        with open(CSV_FILE, "r", newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                coordonate.append(row)
+        
+        # Check if index is valid
+        if index < 0 or index >= len(coordonate):
+            return jsonify({"mesaj": "Index invalid"}), 400
+        
+        # Remove the coordinate at the specified index
+        coordonate.pop(index)
+        
+        # Rewrite the CSV file
+        with open(CSV_FILE, "w", newline='') as f:
+            if coordonate:
+                fieldnames = ["timestamp", "lat", "lon", "azimut"]
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(coordonate)
+            else:
+                # If no coordinates left, just write header
+                writer = csv.writer(f)
+                writer.writerow(["timestamp", "lat", "lon", "azimut"])
+        
+        return jsonify({"mesaj": f"Coordonata #{index + 1} a fost ștearsă cu succes"}), 200
+        
+    except Exception as e:
+        print(f"[❌] Eroare la ștergerea coordonatei: {str(e)}")
+        return jsonify({"mesaj": "Eroare la ștergerea coordonatei"}), 500
+
 if __name__ == '__main__':
     # Ensure CSV file exists with header on startup
     ensure_csv_header()
-    print("🚀 Server pornit pe http://0.0.0.0:5173")
-    print("🌐 Acces web la: http://localhost:5173 sau http://192.168.1.129:5173")
-    print("📡 Endpoints disponibile:")
-    print("   GET / - Pagina principală (rf_form.html)")
-    print("   POST /adauga - Adaugă coordonate")
+    print("Server pornit pe http://0.0.0.0:5173")
+    print("Acces web la: http://localhost:5173 sau http://192.168.1.129:5173")
+    print("Endpoints disponibile:")
+    print("   GET / - Pagina principala (rf_form.html)")
+    print("   GET /admin.html - Interfata de administrare")
+    print("   POST /adauga - Adauga coordonate")
     print("   GET /coordonate - Preia toate coordonatele")
-    print("   DELETE /sterge - Șterge toate coordonatele")
+    print("   DELETE /sterge - Sterge toate coordonatele")
+    print("   DELETE /sterge/<index> - Sterge coordonata la indexul specificat")
     port = int(os.environ.get('PORT', 5173))
     app.run(host='0.0.0.0', port=port, debug=False)

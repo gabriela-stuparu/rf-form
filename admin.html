@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ro">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin - Gestionare Coordonate</title>
+    <link rel="stylesheet" href="css/admin.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Admin Panel</h1>
+        <p>Gestionare Coordonate GPS</p>
+      </div>
+
+      <div class="content">
+        <div id="alert-container"></div>
+
+        <div class="controls">
+          <a href="/" class="btn btn-primary">← Înapoi la Formular</a>
+          <div>
+            <button onclick="loadCoordinates()" class="btn btn-primary">
+              Reîncarcă
+            </button>
+            <button onclick="confirmDeleteAll()" class="btn btn-danger">
+              Șterge Toate
+            </button>
+          </div>
+        </div>
+
+        <div class="stats" id="stats">
+          <h3>Statistici</h3>
+          <p id="stats-text">Se încarcă...</p>
+        </div>
+
+        <div class="table-container">
+          <div id="loading" class="loading">
+            <p>Se încarcă coordonatele...</p>
+          </div>
+
+          <div id="empty-state" class="empty-state" style="display: none">
+            <h3>Nu există coordonate</h3>
+            <p>Nu au fost găsite coordonate în sistem.</p>
+            <a href="/" class="btn btn-primary">Adaugă Prima Coordonată</a>
+          </div>
+
+          <table id="coordinates-table" style="display: none">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Latitudine</th>
+                <th>Longitudine</th>
+                <th>Azimut</th>
+                <th>Acțiuni</th>
+              </tr>
+            </thead>
+            <tbody id="coordinates-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal for delete confirmation -->
+    <div id="deleteModal" class="modal">
+      <div class="modal-content">
+        <h3>Confirmare Ștergere</h3>
+        <p id="deleteMessage">
+          Ești sigur că vrei să ștergi această coordonată?
+        </p>
+        <div class="modal-buttons">
+          <button onclick="closeModal()" class="btn btn-primary">
+            Anulează
+          </button>
+          <button onclick="confirmDelete()" class="btn btn-danger">
+            Șterge
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let coordinates = []
+      let deleteIndex = -1
+
+      function showAlert(message, type = "success") {
+        const alertContainer = document.getElementById("alert-container")
+        const alertClass = type === "success" ? "alert-success" : "alert-error"
+
+        alertContainer.innerHTML = `
+                <div class="alert ${alertClass}">
+                    ${message}
+                </div>
+            `
+
+        setTimeout(() => {
+          alertContainer.innerHTML = ""
+        }, 5000)
+      }
+
+      function showModal(message, index) {
+        deleteIndex = index
+        document.getElementById("deleteMessage").textContent = message
+        document.getElementById("deleteModal").style.display = "block"
+      }
+
+      function closeModal() {
+        document.getElementById("deleteModal").style.display = "none"
+        deleteIndex = -1
+      }
+
+      function confirmDeleteAll() {
+        showModal(
+          "Ești sigur că vrei să ștergi TOATE coordonatele? Această acțiune nu poate fi anulată!",
+          "all"
+        )
+      }
+
+      function confirmDeleteSingle(index) {
+        const coord = coordinates[index]
+        showModal(
+          `Ești sigur că vrei să ștergi coordonata din ${coord.timestamp}?`,
+          index
+        )
+      }
+
+      async function confirmDelete() {
+        if (deleteIndex === "all") {
+          await deleteAllCoordinates()
+        } else if (deleteIndex >= 0) {
+          await deleteSingleCoordinate(deleteIndex)
+        }
+        closeModal()
+      }
+
+      async function loadCoordinates() {
+        try {
+          document.getElementById("loading").style.display = "block"
+          document.getElementById("coordinates-table").style.display = "none"
+          document.getElementById("empty-state").style.display = "none"
+
+          const response = await fetch("/coordonate")
+          const data = await response.json()
+
+          coordinates = data.coordonate || []
+
+          document.getElementById("loading").style.display = "none"
+
+          if (coordinates.length === 0) {
+            document.getElementById("empty-state").style.display = "block"
+            document.getElementById("stats-text").textContent =
+              "Nu există coordonate în sistem"
+          } else {
+            displayCoordinates()
+            updateStats()
+          }
+        } catch (error) {
+          console.error("Error loading coordinates:", error)
+          showAlert("Eroare la încărcarea coordonatelor!", "error")
+          document.getElementById("loading").style.display = "none"
+        }
+      }
+
+      function displayCoordinates() {
+        const tbody = document.getElementById("coordinates-body")
+        tbody.innerHTML = ""
+
+        coordinates.forEach((coord, index) => {
+          const row = document.createElement("tr")
+          row.innerHTML = `
+                    <td class="timestamp">${coord.timestamp || "N/A"}</td>
+                    <td class="coordinate">${coord.lat || "N/A"}</td>
+                    <td class="coordinate">${coord.lon || "N/A"}</td>
+                    <td class="azimut">${coord.azimut || "N/A"}</td>
+                    <td>
+                        <button onclick="confirmDeleteSingle(${index})" class="btn btn-warning" style="padding: 8px 16px; font-size: 14px;">
+                            Șterge
+                        </button>
+                    </td>
+                `
+          tbody.appendChild(row)
+        })
+
+        document.getElementById("coordinates-table").style.display = "table"
+      }
+
+      function updateStats() {
+        const total = coordinates.length
+        const withAzimut = coordinates.filter(
+          (c) => c.azimut && c.azimut.trim()
+        ).length
+        const withoutAzimut = total - withAzimut
+
+        document.getElementById("stats-text").innerHTML = `
+                <strong>${total}</strong> coordonate totale • 
+                <strong>${withAzimut}</strong> cu azimut • 
+                <strong>${withoutAzimut}</strong> fără azimut
+            `
+      }
+
+      async function deleteSingleCoordinate(index) {
+        try {
+          const response = await fetch(`/sterge/${index}`, {
+            method: "DELETE",
+          })
+
+          const data = await response.json()
+
+          if (response.ok) {
+            showAlert(data.mesaj || "Coordonata a fost ștearsă cu succes!")
+            await loadCoordinates()
+          } else {
+            showAlert(data.mesaj || "Eroare la ștergerea coordonatei!", "error")
+          }
+        } catch (error) {
+          console.error("Error deleting coordinate:", error)
+          showAlert("Eroare la ștergerea coordonatei!", "error")
+        }
+      }
+
+      async function deleteAllCoordinates() {
+        try {
+          const response = await fetch("/sterge", {
+            method: "DELETE",
+          })
+
+          const data = await response.json()
+
+          if (response.ok) {
+            showAlert(
+              data.mesaj || "Toate coordonatele au fost șterse cu succes!"
+            )
+            await loadCoordinates()
+          } else {
+            showAlert(
+              data.mesaj || "Eroare la ștergerea coordonatelor!",
+              "error"
+            )
+          }
+        } catch (error) {
+          console.error("Error deleting all coordinates:", error)
+          showAlert("Eroare la ștergerea coordonatelor!", "error")
+        }
+      }
+
+      // Close modal when clicking outside
+      window.onclick = function (event) {
+        const modal = document.getElementById("deleteModal")
+        if (event.target === modal) {
+          closeModal()
+        }
+      }
+
+      // Load coordinates on page load
+      document.addEventListener("DOMContentLoaded", loadCoordinates)
+    </script>
+  </body>
+</html>
